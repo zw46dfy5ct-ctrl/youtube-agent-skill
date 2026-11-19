@@ -28,7 +28,7 @@ YOU = re.compile(r"\b(you|your|you're|youre|yourself)\b", re.I)
 STAKE = re.compile(r"\b(lose|lost|wasting|waste|quit|fail|broke|cost|risk|before|stop|never|die|dying|dead)\b", re.I)
 CURIOSITY = re.compile(r"\b(why|how|what|which|until|before|but|nobody|almost|except|reason|actually)\b", re.I)
 
-def words(t): return re.findall(r"[a-z0-9'%$.]+", t.lower())
+def words(t): return re.findall(r"[\w'%$.]+", t.lower())
 
 def specificity(t):
     w = words(t)
@@ -76,17 +76,22 @@ def classify(t):
     return (best["name"] if best else "Unclassified"), hits
 
 def score(t):
+    if re.search(r"[А-Яа-яЁёҢңӨөҮү]", t):
+        return {"WORDS": len(words(t))}, None, "Text scoring supports English only", 0
     parts = {n: fn(t) for n, fn in PROPS}
     vals = list(parts.values())
     verdict = round(0.6 * (sum(vals) / len(vals)) + 0.4 * min(vals))
     name, hits = classify(t)
     return parts, verdict, name, hits
 
-def band(v): return "STRONG" if v >= 72 else "WORKABLE" if v >= 55 else "WEAK"
+def band(v): return "UNSCORED" if v is None else "STRONG" if v >= 72 else "WORKABLE" if v >= 55 else "WEAK"
 
 def report(t, parts, verdict, name, hits):
     print(f"\n  {t.strip()}")
     print(f"  {'-' * min(72, max(20, len(t.strip())))}")
+    if verdict is None:
+        print(f"  {name}; {parts['WORDS']} words")
+        return
     for k, v in parts.items():
         print(f"    {k:<12} {v:3d}  {'#' * (v // 5)}")
     print(f"    {'VERDICT':<12} {verdict:3d}  {band(verdict)}")
@@ -117,13 +122,14 @@ def main():
         parts, verdict, name, hits = score(t)
         out.append({"hook": t.strip(), "properties": parts, "verdict": verdict,
                     "band": band(verdict), "formula": name, "matched": hits})
-    out.sort(key=lambda r: -r["verdict"])
+    out.sort(key=lambda r: -(r["verdict"] if r["verdict"] is not None else -1))
     if as_json:
         print(json.dumps([{k: v for k, v in r.items() if k != "matched"} for r in out], indent=1)); return
     for r in out:
         report(r["hook"], r["properties"], r["verdict"], r["formula"], r["matched"])
-    if len(out) > 1:
+    if len(out) > 1 and out[0]["verdict"] is not None:
         print(f"\n  winner: {out[0]['hook'].strip()}  ({out[0]['verdict']}, {out[0]['band']})\n")
 
 if __name__ == "__main__":
     main()
+

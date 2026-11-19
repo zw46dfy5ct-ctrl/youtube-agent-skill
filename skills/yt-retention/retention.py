@@ -33,21 +33,30 @@ def load_csv(path):
     return rows
 
 def main():
-    a = sys.argv[1:]
-    as_json = "--json" in a; a = [x for x in a if x != "--json"]
-    tr = a[a.index("--transcript") + 1] if "--transcript" in a else None
-    files = [x for x in a if not x.startswith("--") and x != tr]
-    if not files or not os.path.exists(files[0]): print(__doc__); sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("csv")
+    parser.add_argument("--axis", choices=("seconds", "percent"))
+    parser.add_argument("--duration", type=float)
+    parser.add_argument("--opening", type=float, default=30)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--transcript")
+    args = parser.parse_args()
+    files, tr, as_json = [args.csv], args.transcript, args.json
     rows = load_csv(files[0])
     if len(rows) < 8: print("could not read at least 8 data points from that csv"); sys.exit(1)
     xs = [r[0] for r in rows]; ys = [r[1] for r in rows]
-    pct_axis = max(xs) <= 100.5
-    dur = None
-    if "--duration" in a: dur = float(a[a.index("--duration") + 1])
-    def at(x): return (x / 100.0 * dur) if (pct_axis and dur) else x
-    start = ys[0] or 100.0
-    # HOOK: the first 30 seconds, or the first 10% when the axis is a percentage and we have no duration
-    cutoff = 30.0 if not pct_axis else (30.0 / dur * 100 if dur else 10.0)
+    if args.axis is None and max(xs) <= 100.5:
+        parser.error("Specify --axis seconds or --axis percent for this ambiguous timeline")
+    pct_axis = args.axis == "percent"
+    dur = args.duration
+    if args.opening <= 0 or (dur is not None and dur <= 0):
+        parser.error("Duration and opening must be positive")
+    if pct_axis and dur is None:
+        parser.error("Percent positions require --duration in seconds")
+    def at(x): return x * dur / 100 if pct_axis else x
+    start = ys[0]
+    cutoff = args.opening * 100 / dur if pct_axis else args.opening
     hook_end = min((y for x, y in rows if x <= cutoff), default=start)
     hook_leak = start - hook_end
     drops = []
@@ -75,16 +84,15 @@ def main():
            "end": ys[-1], "cliffs": cliffs, "slide_per_unit": round(slide, 3), "said": said}
     if as_json: print(json.dumps(out, indent=1)); return
     print(f"\n  {files[0]}   {len(rows)} points   {ys[0]:.1f}% -> {ys[-1]:.1f}%\n")
-    verdict = "healthy" if hook_leak < 25 else "leaking" if hook_leak < 40 else "severe"
-    print(f"  HOOK LEAK   {hook_leak:.1f}% lost in the opening   [{verdict}]")
-    print(f"              under 25 is healthy for this length. Fix the first line before anything else.\n")
+    print(f"  Opening loss over first {args.opening:g}s: {hook_leak:.1f} percentage points")
     print("  CLIFFS      the moments people actually left")
     for c in cliffs:
         where = f"{c['at_seconds']:.0f}s" if c["at_seconds"] is not None else f"{c['from']}"
         print(f"    -{c['lost']:5.1f}%  at {where:>8}" + (f"   \"{said.get(str(c['from']),'')}\"" if said else ""))
     if not cliffs: print("    none steeper than 0.8% - the loss is all slide, not moments")
     print(f"\n  SLIDE       {slide:.3f}% per unit across the middle")
-    print( "              a flat slide is pacing, not content. Cut the middle, do not rewrite it.\n")
+
 
 if __name__ == "__main__":
     main()
+

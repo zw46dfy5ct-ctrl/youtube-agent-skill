@@ -107,3 +107,9 @@ writes the line without it.
 ## Licence
 
 MIT. Use it, change it, ship it.
+
+## Визуальные Shorts в Codex
+
+Открой репозиторий в Codex и напиши: «Используй visual-shorts. Сделай ролик про кубик, который едет против потока». [Три готовых сценария](examples/cube-pilots.md) · [Профиль канала](profiles/cube-physics.md).
+
+Для CSV с секундами укажи `--axis seconds`, для процентов — `--axis percent --duration 36` (подставь длину своего видео). Добавь `--opening 3` для оценки первых трёх секунд.
